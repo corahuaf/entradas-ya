@@ -4,32 +4,52 @@
 
 	export let data;
 
-	let nuevoProducto = '';
-	let nuevoPrecio = '';
+	let productoSeleccionado = '';
+	let montoRecibido: number | string = '';
+	let metodo_pago = 'efectivo';
 	let mostrando = 'tabla'; // 'tabla' o 'agregar'
 
+	$: precioProducto = productoSeleccionado 
+		? Number(
+				data.productos.find((p: any) => p.id === productoSeleccionado)?.precio || 0
+			)
+		: 0;
+
+	$: vuelto = montoRecibido && precioProducto 
+		? Math.max(0, Number(montoRecibido) - precioProducto)
+		: 0;
+
 	async function agregarVenta() {
-		if (!nuevoProducto || !nuevoPrecio) {
-			alert('Ingrese producto y precio');
+		if (!productoSeleccionado || !montoRecibido) {
+			alert('Seleccione producto e ingrese monto');
 			return;
 		}
+
+		const producto = data.productos.find((p: any) => p.id === productoSeleccionado);
 
 		const response = await fetch('/ventas', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				entrada_id: null,
-				producto: nuevoProducto,
-				precio: parseFloat(nuevoPrecio)
+				producto_id: productoSeleccionado,
+				producto: producto.nombre,
+				precio: precioProducto,
+				monto_recibido: parseFloat(String(montoRecibido)),
+				vuelto: vuelto,
+				metodo_pago
 			})
 		});
 
 		if (response.ok) {
-			nuevoProducto = '';
-			nuevoPrecio = '';
+			productoSeleccionado = '';
+			montoRecibido = '';
+			metodo_pago = 'efectivo';
 			mostrando = 'tabla';
 			// Recargar datos
 			location.reload();
+		} else {
+			alert('Error al registrar venta');
 		}
 	}
 </script>
@@ -67,8 +87,10 @@
 					<tr>
 						<th>Producto</th>
 						<th>Precio</th>
+						<th>Monto Recibido</th>
+						<th>Vuelto</th>
+						<th>Método de Pago</th>
 						<th>Fecha</th>
-						<th>Asistente</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -76,8 +98,10 @@
 						<tr>
 							<td>{venta.producto}</td>
 							<td>{formatPrice(venta.precio)}</td>
+							<td>{venta.monto_recibido ? formatPrice(venta.monto_recibido) : '-'}</td>
+							<td>{venta.vuelto ? formatPrice(venta.vuelto) : '-'}</td>
+							<td style="text-transform: capitalize;">{venta.metodo_pago}</td>
 							<td>{formatDateTime(venta.fecha)}</td>
-							<td>{venta.nombre_asistente || 'No asignado'}</td>
 						</tr>
 					{/each}
 				</tbody>
@@ -87,18 +111,53 @@
 		<div class="form-container">
 			<div class="form-group">
 				<label for="producto">Producto</label>
-				<input
-					id="producto"
-					bind:value={nuevoProducto}
-					type="text"
-					placeholder="Nombre del producto"
-				/>
+				<select id="producto" bind:value={productoSeleccionado}>
+					<option value="">-- Seleccionar Producto --</option>
+					{#each data.productos as producto}
+						<option value={producto.id}>
+							{producto.nombre} - {formatPrice(producto.precio)}
+						</option>
+					{/each}
+				</select>
 			</div>
-			<div class="form-group">
-				<label for="precio">Precio (S/.)</label>
-				<input id="precio" bind:value={nuevoPrecio} type="number" placeholder="0.00" step="0.01" />
-			</div>
-			<button class="btn btn-success" onclick={agregarVenta}>Registrar Venta</button>
+
+			{#if precioProducto > 0}
+				<div class="precio-display">
+					<p>Precio: <strong>{formatPrice(precioProducto)}</strong></p>
+				</div>
+
+				<div class="form-group">
+					<label for="monto">Monto Recibido (S/.)</label>
+					<input
+						id="monto"
+						bind:value={montoRecibido}
+						type="number"
+						placeholder="0.00"
+						step="0.01"
+						min="0"
+					/>
+				</div>
+
+				{#if montoRecibido}
+					<div class="vuelto-display">
+						<p>Vuelto: <strong style="color: #2ecc71; font-size: 1.3em">{formatPrice(vuelto)}</strong></p>
+					</div>
+				{/if}
+
+				<div class="form-group">
+					<label for="metodo">Método de Pago</label>
+					<select id="metodo" bind:value={metodo_pago}>
+						<option value="efectivo">Efectivo</option>
+						<option value="tarjeta">Tarjeta</option>
+						<option value="transferencia">Transferencia</option>
+						<option value="otro">Otro</option>
+					</select>
+				</div>
+
+				<button class="btn btn-success" onclick={agregarVenta}>Registrar Venta</button>
+			{:else}
+				<p style="color: #999;">Selecciona un producto para continuar</p>
+			{/if}
 		</div>
 	{/if}
 </div>
@@ -144,6 +203,7 @@
 	.btn-success {
 		background-color: #2ecc71;
 		color: white;
+		width: 100%;
 	}
 
 	.btn-success:hover {
@@ -190,7 +250,7 @@
 		border-radius: 8px;
 		padding: 30px;
 		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-		max-width: 400px;
+		max-width: 450px;
 		margin: 20px auto;
 	}
 
@@ -206,7 +266,8 @@
 		color: #2c3e50;
 	}
 
-	input {
+	input,
+	select {
 		width: 100%;
 		padding: 12px;
 		border: 1px solid #bdc3c7;
@@ -215,9 +276,27 @@
 		font-family: inherit;
 	}
 
-	input:focus {
+	input:focus,
+	select:focus {
 		outline: none;
 		border-color: #3498db;
 		box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+	}
+
+	.precio-display {
+		background-color: #ecf0f1;
+		padding: 15px;
+		border-radius: 6px;
+		margin-bottom: 20px;
+		color: #2c3e50;
+	}
+
+	.vuelto-display {
+		background-color: #d5f4e6;
+		padding: 15px;
+		border-radius: 6px;
+		margin-bottom: 20px;
+		color: #27ae60;
+		text-align: center;
 	}
 </style>

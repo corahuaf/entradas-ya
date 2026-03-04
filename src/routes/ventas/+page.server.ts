@@ -8,12 +8,20 @@ interface VentasRow {
 	precio: number;
 	fecha: string;
 	nombre_asistente: string | null;
+	metodo_pago: string;
+	vuelto: number | null;
 }
 
 interface Totales {
 	cantidad_ventas: number;
 	recaudacion_total: number | null;
 	promedio: number | null;
+}
+
+interface Producto {
+	id: string;
+	nombre: string;
+	precio: number;
 }
 
 export const load: PageServerLoad = async () => {
@@ -26,7 +34,9 @@ export const load: PageServerLoad = async () => {
 				vb.producto,
 				vb.precio,
 				vb.fecha,
-				e.nombre_asistente
+				e.nombre_asistente,
+				vb.metodo_pago,
+				vb.vuelto
 			FROM ventas_bebidas vb
 			LEFT JOIN entradas e ON vb.entrada_id = e.id
 			ORDER BY vb.fecha DESC
@@ -40,11 +50,18 @@ export const load: PageServerLoad = async () => {
 			FROM ventas_bebidas
 		`;
 
+		const productos = await sql`
+			SELECT id, nombre, precio FROM productos 
+			WHERE activo = true 
+			ORDER BY nombre ASC
+		`;
+
 		const totales = totalesResult[0] || { cantidad_ventas: 0, recaudacion_total: 0, promedio: 0 };
 
 		// Convertir strings a números si es necesario
 		return {
 			ventas: (ventas || []) as VentasRow[],
+			productos: (productos || []) as Producto[],
 			totales: {
 				cantidad_ventas: Number(totales.cantidad_ventas) || 0,
 				recaudacion_total: Number(totales.recaudacion_total) || 0,
@@ -55,6 +72,7 @@ export const load: PageServerLoad = async () => {
 		console.error('Error cargando ventas:', error);
 		return {
 			ventas: [],
+			productos: [],
 			totales: { cantidad_ventas: 0, recaudacion_total: 0, promedio: 0 }
 		};
 	}
