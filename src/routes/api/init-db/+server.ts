@@ -49,6 +49,12 @@ export const POST: RequestHandler = async () => {
 			)
 		`;
 
+		// Asegurar que la columna activo existe
+		await sql`
+			ALTER TABLE productos 
+			ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE
+		`;
+
 		// Verificar si la tabla ventas_bebidas tiene las nuevas columnas
 		const columnCheck = await sql`
 			SELECT column_name FROM information_schema.columns 

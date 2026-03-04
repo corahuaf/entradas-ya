@@ -4,11 +4,16 @@ import type { RequestHandler } from '@sveltejs/kit';
 
 export const POST: RequestHandler = async () => {
 	try {
+		// Primero, agregar la columna 'activo' si no existe
+		await sql`
+			ALTER TABLE productos 
+			ADD COLUMN IF NOT EXISTS activo BOOLEAN DEFAULT TRUE
+		`;
+
 		// Activar todos los productos
-		const result = await sql`
+		await sql`
 			UPDATE productos 
-			SET activo = true 
-			WHERE activo = false
+			SET activo = true
 		`;
 
 		// Obtener el estado actual
