@@ -54,7 +54,6 @@ export const load: PageServerLoad = async () => {
 
 		const productos = await sql`
 			SELECT id, nombre, precio FROM productos 
-			WHERE activo = true 
 			ORDER BY nombre ASC
 		`;
 

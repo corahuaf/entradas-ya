@@ -18,10 +18,9 @@ export const GET: RequestHandler = async () => {
 			`;
 		}
 
-		// Obtener productos activos
+		// Obtener TODOS los productos (sin filtrar por activo)
 		const productos = await sql`
 			SELECT id, nombre, precio FROM productos 
-			WHERE activo = true 
 			ORDER BY nombre ASC
 		`;
 
