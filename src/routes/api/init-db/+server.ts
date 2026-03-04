@@ -2,6 +2,39 @@ import { sql } from '$lib/db';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from '@sveltejs/kit';
 
+// GET: Ver estado de la BD
+export const GET: RequestHandler = async () => {
+	try {
+		const tablesCheck = await sql`
+			SELECT table_name FROM information_schema.tables 
+			WHERE table_name IN ('entradas', 'productos', 'ventas_bebidas')
+		`;
+
+		const tables = tablesCheck.map((t: any) => t.table_name);
+		
+		let productoCount = 0;
+		if (tables.includes('productos')) {
+			const count = await sql`SELECT COUNT(*) as count FROM productos`;
+			productoCount = count[0].count;
+		}
+
+		return json({
+			status: 'ok',
+			tables: {
+				entradas: tables.includes('entradas'),
+				productos: tables.includes('productos'),
+				ventas_bebidas: tables.includes('ventas_bebidas')
+			},
+			productoCount,
+			initialized: tables.length === 3 && productoCount > 0
+		});
+	} catch (error) {
+		console.error('Error checando BD:', error);
+		return json({ status: 'error', initialized: false }, { status: 500 });
+	}
+};
+
+// POST: Inicializar la BD
 export const POST: RequestHandler = async () => {
 	try {
 		// Crear tabla de productos si no existe
@@ -53,7 +86,8 @@ export const POST: RequestHandler = async () => {
 
 		return json({
 			success: true,
-			message: 'Base de datos inicializada correctamente'
+			message: 'Base de datos inicializada correctamente',
+			productsAdded: productosData.length
 		});
 	} catch (error) {
 		console.error('Error inicializando BD:', error);
