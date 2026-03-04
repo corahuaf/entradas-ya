@@ -57,10 +57,12 @@ export const load: PageServerLoad = async () => {
 			ORDER BY nombre ASC
 		`;
 
+		console.log('Productos cargados en ventas:', productos);
+
 		const totales = totalesResult[0] || { cantidad_ventas: 0, recaudacion_total: 0, promedio: 0 };
 
 		// Convertir strings a números si es necesario
-		return {
+		const returnData = {
 			ventas: (ventas || []) as VentasRow[],
 			productos: (productos || []) as Producto[],
 			totales: {
@@ -69,6 +71,9 @@ export const load: PageServerLoad = async () => {
 				promedio: Number(totales.promedio) || 0
 			}
 		};
+
+		console.log('Retornando data:', returnData);
+		return returnData;
 	} catch (error) {
 		console.error('Error cargando ventas:', error);
 		return {

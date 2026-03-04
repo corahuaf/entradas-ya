@@ -1,6 +1,7 @@
 <script lang="ts">
 	import StatsCard from '$lib/components/StatsCard.svelte';
 	import { formatPrice, formatDateTime } from '$lib/utils';
+	import { onMount } from 'svelte';
 
 	export let data;
 
@@ -8,10 +9,34 @@
 	let montoRecibido: number | string = '';
 	let metodo_pago = 'efectivo';
 	let mostrando = 'tabla'; // 'tabla' o 'agregar'
+	let productos: any[] = [];
+
+	onMount(async () => {
+		console.log('Data recibida en componente:', data);
+		
+		// Si los productos vienen en data, usarlos
+		if (data.productos && data.productos.length > 0) {
+			productos = data.productos;
+			console.log('Productos de data:', productos);
+		} else {
+			// Si no, cargarlos desde la API
+			console.log('Cargando productos desde API...');
+			try {
+				const res = await fetch('/api/productos');
+				const result = await res.json();
+				if (result.success && result.productos) {
+					productos = result.productos;
+					console.log('Productos de API:', productos);
+				}
+			} catch (e) {
+				console.error('Error cargando productos:', e);
+			}
+		}
+	});
 
 	$: precioProducto = productoSeleccionado 
 		? Number(
-				data.productos.find((p: any) => p.id === productoSeleccionado)?.precio || 0
+				productos.find((p: any) => p.id === productoSeleccionado)?.precio || 0
 			)
 		: 0;
 
@@ -25,7 +50,7 @@
 			return;
 		}
 
-		const producto = data.productos.find((p: any) => p.id === productoSeleccionado);
+		const producto = productos.find((p: any) => p.id === productoSeleccionado);
 
 		if (!producto) {
 			alert('Producto no encontrado');
@@ -112,13 +137,12 @@
 				</tbody>
 			</table>
 		</div>
-	{:else}
 		<div class="form-container">
 			<div class="form-group">
 				<label for="producto">Producto</label>
 				<select id="producto" bind:value={productoSeleccionado}>
 					<option value="">-- Seleccionar Producto --</option>
-					{#each data.productos as producto}
+					{#each productos as producto}
 						<option value={producto.id}>
 							{producto.nombre} - {formatPrice(producto.precio)}
 						</option>
