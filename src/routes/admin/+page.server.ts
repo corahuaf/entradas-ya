@@ -12,15 +12,13 @@ interface VentasRow {
 
 export const load: PageServerLoad = async () => {
 	try {
-		const asistentes =
-			(await sql`SELECT COUNT(*) as total FROM entradas WHERE validada = true`) as Stats[];
-		const ventas =
-			(await sql`SELECT SUM(precio) as recaudado, COUNT(*) as cantidad FROM ventas_bebidas`) as VentasRow[];
+		const asistentes = await sql`SELECT COUNT(*) as total FROM entradas WHERE validada = true`;
+		const ventas = await sql`SELECT COALESCE(SUM(precio), 0) as recaudado, COUNT(*) as cantidad FROM ventas_bebidas`;
 
 		return {
-			totalAsistentes: asistentes[0]?.total || 0,
-			recaudado: ventas[0]?.recaudado || 0,
-			totalVentas: ventas[0]?.cantidad || 0
+			totalAsistentes: Number(asistentes[0]?.total) || 0,
+			recaudado: Number(ventas[0]?.recaudado) || 0,
+			totalVentas: Number(ventas[0]?.cantidad) || 0
 		};
 	} catch (e) {
 		console.error('Error al cargar datos del admin:', e);
