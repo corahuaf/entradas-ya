@@ -8,8 +8,9 @@ interface VentasRow {
 	precio: number;
 	fecha: string;
 	nombre_asistente: string | null;
-	metodo_pago: string;
+	monto_recibido: number | null;
 	vuelto: number | null;
+	metodo_pago: string;
 }
 
 interface Totales {
@@ -35,8 +36,9 @@ export const load: PageServerLoad = async () => {
 				vb.precio,
 				vb.fecha,
 				e.nombre_asistente,
-				vb.metodo_pago,
-				vb.vuelto
+				vb.monto_recibido,
+				vb.vuelto,
+				vb.metodo_pago
 			FROM ventas_bebidas vb
 			LEFT JOIN entradas e ON vb.entrada_id = e.id
 			ORDER BY vb.fecha DESC

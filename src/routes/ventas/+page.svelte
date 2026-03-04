@@ -27,6 +27,11 @@
 
 		const producto = data.productos.find((p: any) => p.id === productoSeleccionado);
 
+		if (!producto) {
+			alert('Producto no encontrado');
+			return;
+		}
+
 		const response = await fetch('/ventas', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
