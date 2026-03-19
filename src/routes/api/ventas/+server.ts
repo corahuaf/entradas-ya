@@ -89,6 +89,56 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 	}
 
 	try {
+		const ventaIdParam = url.searchParams.get('ventaId');
+
+		if (ventaIdParam) {
+			const ventaId = parseInt(ventaIdParam, 10);
+
+			if (Number.isNaN(ventaId)) {
+				return json(
+					{ success: false, message: 'ID de venta inválido' },
+					{ status: 400 }
+				);
+			}
+
+			const venta = await sql`
+				SELECT
+					v.id,
+					v.fecha,
+					v.total,
+					v.metodo_pago,
+					v.estado,
+					u.nombre as usuario_nombre
+				FROM ventas v
+				JOIN usuarios u ON v.usuario_id = u.id
+				WHERE v.id = ${ventaId}
+				LIMIT 1
+			`;
+
+			if (venta.length === 0) {
+				return json(
+					{ success: false, message: 'Venta no encontrada' },
+					{ status: 404 }
+				);
+			}
+
+			const detalles = await sql`
+				SELECT
+					dv.id,
+					dv.producto_id,
+					p.nombre as producto_nombre,
+					dv.cantidad,
+					dv.precio,
+					dv.subtotal
+				FROM detalle_venta dv
+				JOIN productos p ON dv.producto_id = p.id
+				WHERE dv.venta_id = ${ventaId}
+				ORDER BY dv.id ASC
+			`;
+
+			return json({ success: true, venta: venta[0], detalles });
+		}
+
 		const limit = parseInt(url.searchParams.get('limit') || '50');
 		const offset = parseInt(url.searchParams.get('offset') || '0');
 

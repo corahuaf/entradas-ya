@@ -88,6 +88,12 @@
 		detalleEntrada = null;
 	}
 
+	function cerrarDetalleDesdeOverlay(event: MouseEvent) {
+		if (event.target === event.currentTarget) {
+			cerrarDetalle();
+		}
+	}
+
 	$: entradasFiltradas = todasEntradas.filter((entrada) => {
 		const matchBusqueda =
 			!busquedaEntradas ||
@@ -269,7 +275,7 @@
 
 	<!-- MODAL DE DETALLES -->
 	{#if mostrarDetalle && detalleEntrada}
-		<div class="modal-overlay" on:click={cerrarDetalle} role="presentation">
+		<div class="modal-overlay" on:click={cerrarDetalleDesdeOverlay} role="presentation">
 			<article class="modal-content" role="dialog" aria-modal="true">
 				<div class="modal-header">
 					<h2>📋 Detalles de Entrada</h2>

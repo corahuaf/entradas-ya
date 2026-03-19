@@ -10,6 +10,8 @@
 	let filtro = 'todos';
 	let ventaSeleccionada: any = null;
 	let mostrarDetalleVenta = false;
+	let detalleProductos: any[] = [];
+	let cargandoDetalle = false;
 
 	onMount(async () => {
 		const res = await fetch('/api/auth/me');
@@ -37,14 +39,33 @@
 		}
 	}
 
-	function verDetalleVenta(venta: any) {
+	async function verDetalleVenta(venta: any) {
 		ventaSeleccionada = venta;
 		mostrarDetalleVenta = true;
+		detalleProductos = [];
+		cargandoDetalle = true;
+
+		try {
+			const res = await fetch(`/api/ventas?ventaId=${venta.id}`);
+			const data = await res.json();
+			if (data.success) {
+				detalleProductos = data.detalles || [];
+				if (data.venta) {
+					ventaSeleccionada = { ...ventaSeleccionada, ...data.venta };
+				}
+			}
+		} catch (err) {
+			error = 'No se pudo cargar el detalle de productos';
+		} finally {
+			cargandoDetalle = false;
+		}
 	}
 
 	function cerrarDetalleVenta() {
 		mostrarDetalleVenta = false;
 		ventaSeleccionada = null;
+		detalleProductos = [];
+		cargandoDetalle = false;
 	}
 
 	function cerrarDetalleDesdeOverlay(event: MouseEvent) {
@@ -145,6 +166,30 @@
 						<div class="detail-row">
 							<span>Estado:</span>
 							<strong>{ventaSeleccionada.estado}</strong>
+						</div>
+
+						<div class="detail-section">
+							<h4>Productos vendidos</h4>
+							{#if cargandoDetalle}
+								<p class="detalle-loading">Cargando productos...</p>
+							{:else if detalleProductos.length === 0}
+								<p class="detalle-empty">No hay productos registrados para esta venta.</p>
+							{:else}
+								<div class="productos-lista">
+									{#each detalleProductos as item}
+										<div class="producto-row">
+											<div class="producto-main">
+												<strong>{item.producto_nombre}</strong>
+												<span>x{item.cantidad}</span>
+											</div>
+											<div class="producto-precios">
+												<span>S/ {parseFloat(item.precio).toFixed(2)}</span>
+												<strong>S/ {parseFloat(item.subtotal).toFixed(2)}</strong>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
 						</div>
 					</div>
 					<div class="modal-footer">
@@ -305,12 +350,64 @@
 		padding: 18px 20px;
 	}
 
+	.detail-section {
+		margin-top: 16px;
+	}
+
+	.detail-section h4 {
+		margin: 0 0 10px 0;
+		font-size: 16px;
+		color: #1f2937;
+	}
+
 	.detail-row {
 		display: flex;
 		justify-content: space-between;
 		padding: 10px 0;
 		border-bottom: 1px dashed #e5e7eb;
 		gap: 12px;
+	}
+
+	.detalle-loading,
+	.detalle-empty {
+		margin: 0;
+		padding: 8px 0;
+		color: #6b7280;
+	}
+
+	.productos-lista {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.producto-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 10px 12px;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		background: #f8fafc;
+	}
+
+	.producto-main {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		color: #111827;
+	}
+
+	.producto-main span {
+		color: #6b7280;
+		font-size: 13px;
+	}
+
+	.producto-precios {
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		color: #374151;
 	}
 
 	.modal-footer {
