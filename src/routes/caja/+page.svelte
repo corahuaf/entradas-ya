@@ -11,6 +11,8 @@
 	let loading = false;
 	let error = '';
 	let success = '';
+	let mostrarConfirmacion = false;
+	let resultadoVenta: { success: boolean; message: string } | null = null;
 
 	onMount(async () => {
 		// Validar sesión
@@ -90,6 +92,17 @@
 		success = '';
 	}
 
+	function cerrarConfirmacion() {
+		mostrarConfirmacion = false;
+		resultadoVenta = null;
+	}
+
+	function cerrarConfirmacionDesdeOverlay(event: MouseEvent) {
+		if (event.target === event.currentTarget) {
+			cerrarConfirmacion();
+		}
+	}
+
 	$: total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
 	$: filteredProductos = productos.filter((p) =>
 		p.nombre.toLowerCase().includes(busqueda.toLowerCase())
@@ -98,6 +111,8 @@
 	async function registrarVenta() {
 		if (carrito.length === 0) {
 			error = 'El carrito está vacío';
+			resultadoVenta = { success: false, message: 'El carrito está vacío' };
+			mostrarConfirmacion = true;
 			return;
 		}
 
@@ -120,14 +135,26 @@
 			const data = await res.json();
 			if (data.success) {
 				success = 'Venta registrada exitosamente';
+				resultadoVenta = {
+					success: true,
+					message: data.message || 'Venta registrada exitosamente'
+				};
 				limpiarCarrito();
 				await loadProductos();
 			} else {
 				error = data.message || 'Error al registrar venta';
+				resultadoVenta = {
+					success: false,
+					message: data.message || 'Error al registrar venta'
+				};
 			}
 		} catch (err) {
 			error = 'Error al registrar venta';
+			resultadoVenta = { success: false, message: 'Error al registrar venta' };
 		} finally {
+			if (resultadoVenta) {
+				mostrarConfirmacion = true;
+			}
 			loading = false;
 		}
 	}
@@ -220,8 +247,8 @@
 						</div>
 
 						<div class="metodo-pago">
-							<label>Método de Pago:</label>
-							<select bind:value={metodoPago}>
+							<label for="metodo-pago">Método de Pago:</label>
+							<select id="metodo-pago" bind:value={metodoPago}>
 								<option value="EFECTIVO">💵 EFECTIVO</option>
 								<option value="YAPE">📱 YAPE</option>
 								<option value="PLIN">📱 PLIN</option>
@@ -258,6 +285,34 @@
 			</div>
 		</div>
 	</div>
+
+	{#if mostrarConfirmacion && resultadoVenta}
+		<div class="modal-overlay" on:click={cerrarConfirmacionDesdeOverlay} role="presentation">
+			<article
+				class="modal-content result-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="modal-resultado-titulo"
+			>
+				<div class="modal-body">
+					<div class="result-icon" class:success-icon={resultadoVenta.success} class:error-icon={!resultadoVenta.success}>
+						{resultadoVenta.success ? '✓' : '✕'}
+					</div>
+					<h3
+						id="modal-resultado-titulo"
+						class:success-text={resultadoVenta.success}
+						class:error-text={!resultadoVenta.success}
+					>
+						{resultadoVenta.success ? 'Venta Registrada' : 'No se pudo registrar'}
+					</h3>
+					<p class="result-message">{resultadoVenta.message}</p>
+				</div>
+				<div class="modal-footer">
+					<button class="btn btn-modal" on:click={cerrarConfirmacion}>Aceptar</button>
+				</div>
+			</article>
+		</div>
+	{/if}
 {:else}
 	<div class="loading">Cargando...</div>
 {/if}
@@ -580,6 +635,85 @@
 	.btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.45);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1200;
+		padding: 16px;
+	}
+
+	.modal-content {
+		background: #fff;
+		border-radius: 12px;
+		max-width: 420px;
+		width: 100%;
+		box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+	}
+
+	.result-modal {
+		text-align: center;
+	}
+
+	.modal-body {
+		padding: 24px 20px 10px;
+	}
+
+	.result-icon {
+		width: 64px;
+		height: 64px;
+		margin: 0 auto 12px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 32px;
+		font-weight: 700;
+	}
+
+	.success-icon {
+		background: #eafaf1;
+		color: #2ecc71;
+	}
+
+	.error-icon {
+		background: #feeeee;
+		color: #e74c3c;
+	}
+
+	.success-text {
+		color: #1f9d57;
+	}
+
+	.error-text {
+		color: #c0392b;
+	}
+
+	.result-message {
+		color: #4b5563;
+		margin-top: 8px;
+	}
+
+	.modal-footer {
+		padding: 0 20px 20px;
+	}
+
+	.btn-modal {
+		background: #34495e;
+		color: #fff;
+		width: 100%;
+	}
+
+	.btn-modal:hover {
+		background: #2c3e50;
 	}
 
 	@media (max-width: 1024px) {

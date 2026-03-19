@@ -8,6 +8,8 @@
 	let loading = false;
 	let error = '';
 	let filtro = 'todos';
+	let ventaSeleccionada: any = null;
+	let mostrarDetalleVenta = false;
 
 	onMount(async () => {
 		const res = await fetch('/api/auth/me');
@@ -32,6 +34,22 @@
 			error = 'Error al cargar ventas';
 		} finally {
 			loading = false;
+		}
+	}
+
+	function verDetalleVenta(venta: any) {
+		ventaSeleccionada = venta;
+		mostrarDetalleVenta = true;
+	}
+
+	function cerrarDetalleVenta() {
+		mostrarDetalleVenta = false;
+		ventaSeleccionada = null;
+	}
+
+	function cerrarDetalleDesdeOverlay(event: MouseEvent) {
+		if (event.target === event.currentTarget) {
+			cerrarDetalleVenta();
 		}
 	}
 
@@ -81,7 +99,7 @@
 					</thead>
 					<tbody>
 						{#each ventas as venta (venta.id)}
-							<tr>
+							<tr class="fila-clickeable" on:click={() => verDetalleVenta(venta)}>
 								<td>{new Date(venta.fecha).toLocaleString()}</td>
 								<td>{venta.usuario_nombre}</td>
 								<td><strong>S/ {parseFloat(venta.total).toFixed(2)}</strong></td>
@@ -91,6 +109,48 @@
 						{/each}
 					</tbody>
 				</table>
+			</div>
+		{/if}
+
+		{#if mostrarDetalleVenta && ventaSeleccionada}
+			<div class="modal-overlay" on:click={cerrarDetalleDesdeOverlay} role="presentation">
+				<article
+					class="modal-content"
+					role="dialog"
+					aria-modal="true"
+					aria-labelledby="historial-modal-title"
+				>
+					<div class="modal-header">
+						<h3 id="historial-modal-title">Detalle de venta #{ventaSeleccionada.id}</h3>
+						<button class="modal-close" on:click={cerrarDetalleVenta} aria-label="Cerrar">✕</button>
+					</div>
+					<div class="modal-body">
+						<div class="detail-row"><span>ID:</span><strong>{ventaSeleccionada.id}</strong></div>
+						<div class="detail-row">
+							<span>Fecha:</span>
+							<strong>{new Date(ventaSeleccionada.fecha).toLocaleString()}</strong>
+						</div>
+						<div class="detail-row">
+							<span>Usuario:</span>
+							<strong>{ventaSeleccionada.usuario_nombre}</strong>
+						</div>
+						<div class="detail-row">
+							<span>Total:</span>
+							<strong>S/ {parseFloat(ventaSeleccionada.total).toFixed(2)}</strong>
+						</div>
+						<div class="detail-row">
+							<span>Método:</span>
+							<strong>{ventaSeleccionada.metodo_pago}</strong>
+						</div>
+						<div class="detail-row">
+							<span>Estado:</span>
+							<strong>{ventaSeleccionada.estado}</strong>
+						</div>
+					</div>
+					<div class="modal-footer">
+						<button class="btn-close-modal" on:click={cerrarDetalleVenta}>Cerrar</button>
+					</div>
+				</article>
 			</div>
 		{/if}
 	</div>
@@ -184,6 +244,10 @@
 		background: #f9f9f9;
 	}
 
+	.fila-clickeable {
+		cursor: pointer;
+	}
+
 	.badge {
 		display: inline-block;
 		padding: 4px 8px;
@@ -192,6 +256,80 @@
 		color: white;
 		font-size: 12px;
 		font-weight: 600;
+	}
+
+	.modal-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.45);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1200;
+		padding: 16px;
+	}
+
+	.modal-content {
+		background: #fff;
+		border-radius: 12px;
+		max-width: 520px;
+		width: 100%;
+		box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+	}
+
+	.modal-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 18px 20px;
+		border-bottom: 1px solid #ececec;
+	}
+
+	.modal-header h3 {
+		margin: 0;
+		font-size: 20px;
+	}
+
+	.modal-close {
+		background: transparent;
+		border: none;
+		font-size: 24px;
+		cursor: pointer;
+		color: #6b7280;
+	}
+
+	.modal-body {
+		padding: 18px 20px;
+	}
+
+	.detail-row {
+		display: flex;
+		justify-content: space-between;
+		padding: 10px 0;
+		border-bottom: 1px dashed #e5e7eb;
+		gap: 12px;
+	}
+
+	.modal-footer {
+		padding: 0 20px 20px;
+	}
+
+	.btn-close-modal {
+		width: 100%;
+		padding: 10px 12px;
+		border: none;
+		border-radius: 8px;
+		background: #334155;
+		color: white;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.btn-close-modal:hover {
+		background: #1f2937;
 	}
 
 	@media (max-width: 768px) {
