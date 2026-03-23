@@ -139,9 +139,9 @@
 		doc.text(entrada.nombre_cliente, qrBoxX, qrBoxY - 11);
 
 		doc.setFont('helvetica', 'bold');
-		doc.text('FECHA:', qrBoxX, qrBoxY - 5);
+		doc.text('FECHA:', qrBoxX, qrBoxY - 9);
 		doc.setFont('helvetica', 'normal');
-		doc.text(new Date().toLocaleDateString(), qrBoxX, qrBoxY);
+		doc.text(new Date().toLocaleDateString(), qrBoxX, qrBoxY - 4);
 
 		doc.setDrawColor(255, 255, 255);
 		doc.setLineWidth(0.4);
