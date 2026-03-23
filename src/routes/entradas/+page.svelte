@@ -105,7 +105,6 @@
 	function descargarPDF() {
 		if (!entrada || !qrDataUrl) return;
 
-		const evento = eventos.find((e) => String(e.id) === String(entrada.evento_id));
 		const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 		const pageWidth = 210;
 		const pageHeight = 297;
@@ -129,40 +128,25 @@
 			doc.rect(ticketX, ticketY, ticketWidth, ticketHeight, 'F');
 		}
 
-		doc.setTextColor(255, 255, 255);
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(16);
-		doc.text(evento?.nombre || 'EVENTO', ticketX + 8, ticketY + 14);
-
-		doc.setFontSize(10);
-		doc.text('CLIENTE:', ticketX + 8, ticketY + 30);
-		doc.setFont('helvetica', 'normal');
-		doc.text(entrada.nombre_cliente, ticketX + 8, ticketY + 36);
-
-		doc.setFont('helvetica', 'bold');
-		doc.text('FECHA:', ticketX + 8, ticketY + 46);
-		doc.setFont('helvetica', 'normal');
-		doc.text(
-			evento?.fecha ? new Date(evento.fecha).toLocaleDateString() : 'POR CONFIRMAR',
-			ticketX + 8,
-			ticketY + 52
-		);
-
-		doc.setFont('helvetica', 'bold');
-		doc.text('LUGAR:', ticketX + 8, ticketY + 62);
-		doc.setFont('helvetica', 'normal');
-		doc.text(evento?.lugar || 'POR CONFIRMAR', ticketX + 8, ticketY + 68);
-
 		const qrBoxX = ticketX + ticketWidth - 47;
 		const qrBoxY = ticketY + ticketHeight - 47;
+
+		doc.setTextColor(255, 255, 255);
+		doc.setFont('helvetica', 'bold');
+		doc.setFontSize(10);
+		doc.text('CLIENTE:', qrBoxX, qrBoxY - 16);
+		doc.setFont('helvetica', 'normal');
+		doc.text(entrada.nombre_cliente, qrBoxX, qrBoxY - 11);
+
+		doc.setFont('helvetica', 'bold');
+		doc.text('FECHA:', qrBoxX, qrBoxY - 5);
+		doc.setFont('helvetica', 'normal');
+		doc.text(new Date().toLocaleDateString(), qrBoxX, qrBoxY);
+
 		doc.setDrawColor(255, 255, 255);
 		doc.setLineWidth(0.4);
 		doc.rect(qrBoxX, qrBoxY, 39, 39);
 		doc.addImage(qrDataUrl, 'PNG', qrBoxX + 1, qrBoxY + 1, 37, 37);
-
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(9);
-		doc.text(`CODIGO: ${entrada.codigo_qr}`, ticketX + 8, ticketY + ticketHeight - 8);
 
 		doc.setTextColor(40, 40, 40);
 		doc.setFont('helvetica', 'bold');
