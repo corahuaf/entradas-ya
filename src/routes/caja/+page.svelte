@@ -295,7 +295,11 @@
 				aria-labelledby="modal-resultado-titulo"
 			>
 				<div class="modal-body">
-					<div class="result-icon" class:success-icon={resultadoVenta.success} class:error-icon={!resultadoVenta.success}>
+					<div
+						class="result-icon"
+						class:success-icon={resultadoVenta.success}
+						class:error-icon={!resultadoVenta.success}
+					>
 						{resultadoVenta.success ? '✓' : '✕'}
 					</div>
 					<h3

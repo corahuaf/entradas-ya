@@ -15,6 +15,7 @@
 	let nombreCliente = '';
 	let entrada: any = null;
 	let qrDataUrl = '';
+	let fondoDataUrl = '';
 
 	onMount(async () => {
 		const res = await fetch('/api/auth/me');
@@ -24,8 +25,29 @@
 			return;
 		}
 		user = data.user;
-		await loadEventos();
+		await Promise.all([loadEventos(), loadFondoEntrada()]);
 	});
+
+	async function loadFondoEntrada() {
+		try {
+			const res = await fetch('/entrada.png');
+			if (!res.ok) return;
+			const blob = await res.blob();
+			fondoDataUrl = await blobToDataUrl(blob);
+		} catch (err) {
+			// If image load fails, PDF is generated with a plain fallback background.
+			fondoDataUrl = '';
+		}
+	}
+
+	function blobToDataUrl(blob: Blob): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(String(reader.result || ''));
+			reader.onerror = () => reject(new Error('No se pudo leer la imagen de fondo'));
+			reader.readAsDataURL(blob);
+		});
+	}
 
 	async function loadEventos() {
 		try {
@@ -84,75 +106,88 @@
 		if (!entrada || !qrDataUrl) return;
 
 		const evento = eventos.find((e) => String(e.id) === String(entrada.evento_id));
-		const doc = new jsPDF({ unit: 'mm', format: 'a6' });
-		const width = 105;
-		const height = 148;
+		const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+		const pageWidth = 210;
+		const pageHeight = 297;
 
-		// Background
-		doc.setFillColor(245, 245, 245);
-		doc.rect(0, 0, width, height, 'F');
+		const ticketX = 20;
+		const ticketY = 16;
+		const ticketWidth = 170;
+		const ticketHeight = 102;
 
-		// Header band
-		doc.setFillColor(20, 20, 20);
-		doc.rect(0, 0, width, 18, 'F');
-		doc.setTextColor(255, 255, 255);
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(14);
-		doc.text('CONCIERTO - ENTRADA', 8, 12);
+		doc.setFillColor(248, 248, 248);
+		doc.rect(0, 0, pageWidth, pageHeight, 'F');
 
-		// Event title
-		doc.setTextColor(20, 20, 20);
-		doc.setFontSize(16);
-		doc.text(evento ? evento.nombre : 'EVENTO', 8, 32);
+		doc.setDrawColor(210, 210, 210);
+		doc.setLineWidth(0.4);
+		doc.rect(ticketX, ticketY, ticketWidth, ticketHeight);
 
-		// Divider
-		doc.setDrawColor(200, 200, 200);
-		doc.setLineWidth(0.2);
-		doc.line(8, 36, width - 8, 36);
-
-		// Details left column
-		doc.setFont('helvetica', 'normal');
-		doc.setFontSize(10);
-		doc.text('CLIENTE', 8, 44);
-		doc.setFont('helvetica', 'bold');
-		doc.text(entrada.nombre_cliente, 8, 50);
-
-		doc.setFont('helvetica', 'normal');
-		doc.text('FECHA', 8, 60);
-		doc.setFont('helvetica', 'bold');
-		if (evento?.fecha) {
-			doc.text(new Date(evento.fecha).toLocaleDateString(), 8, 66);
+		if (fondoDataUrl) {
+			doc.addImage(fondoDataUrl, 'PNG', ticketX, ticketY, ticketWidth, ticketHeight);
 		} else {
-			doc.text('POR CONFIRMAR', 8, 66);
+			doc.setFillColor(25, 25, 25);
+			doc.rect(ticketX, ticketY, ticketWidth, ticketHeight, 'F');
 		}
 
-		doc.setFont('helvetica', 'normal');
-		doc.text('LUGAR', 8, 76);
+		doc.setTextColor(255, 255, 255);
 		doc.setFont('helvetica', 'bold');
-		doc.text(evento?.lugar || 'POR CONFIRMAR', 8, 82);
+		doc.setFontSize(16);
+		doc.text(evento?.nombre || 'EVENTO', ticketX + 8, ticketY + 14);
 
+		doc.setFontSize(10);
+		doc.text('CLIENTE:', ticketX + 8, ticketY + 30);
 		doc.setFont('helvetica', 'normal');
-		doc.text('CODIGO', 8, 92);
+		doc.text(entrada.nombre_cliente, ticketX + 8, ticketY + 36);
+
+		doc.setFont('helvetica', 'bold');
+		doc.text('FECHA:', ticketX + 8, ticketY + 46);
+		doc.setFont('helvetica', 'normal');
+		doc.text(
+			evento?.fecha ? new Date(evento.fecha).toLocaleDateString() : 'POR CONFIRMAR',
+			ticketX + 8,
+			ticketY + 52
+		);
+
+		doc.setFont('helvetica', 'bold');
+		doc.text('LUGAR:', ticketX + 8, ticketY + 62);
+		doc.setFont('helvetica', 'normal');
+		doc.text(evento?.lugar || 'POR CONFIRMAR', ticketX + 8, ticketY + 68);
+
+		const qrBoxX = ticketX + ticketWidth - 47;
+		const qrBoxY = ticketY + ticketHeight - 47;
+		doc.setDrawColor(255, 255, 255);
+		doc.setLineWidth(0.4);
+		doc.rect(qrBoxX, qrBoxY, 39, 39);
+		doc.addImage(qrDataUrl, 'PNG', qrBoxX + 1, qrBoxY + 1, 37, 37);
+
 		doc.setFont('helvetica', 'bold');
 		doc.setFontSize(9);
-		doc.text(entrada.codigo_qr, 8, 98);
+		doc.text(`CODIGO: ${entrada.codigo_qr}`, ticketX + 8, ticketY + ticketHeight - 8);
 
-		// QR right column
-		doc.setDrawColor(20, 20, 20);
-		doc.rect(62, 40, 35, 35);
-		doc.addImage(qrDataUrl, 'PNG', 63, 41, 33, 33);
+		doc.setTextColor(40, 40, 40);
+		doc.setFont('helvetica', 'bold');
+		doc.setFontSize(11);
+		doc.text('TERMINOS Y CONDICIONES', 20, 142);
 
-		// Perforation line
-		doc.setDrawColor(180, 180, 180);
-		(doc as any).setLineDash([1, 1], 0);
-		doc.line(8, 110, width - 8, 110);
+		doc.setFont('helvetica', 'normal');
+		doc.setFontSize(9);
+		const terminos = [
+			'1. Esta entrada es valida solo para el evento y fecha indicados.',
+			'2. Presentar documento de identidad junto con este ticket.',
+			'3. No se permiten cambios ni devoluciones, salvo cancelacion del evento.',
+			'4. Se prohibe la reventa o duplicacion del codigo QR.',
+			'5. El organizador puede negar el ingreso por incumplimiento de normas.'
+		];
+		doc.text(terminos, 20, 150, { maxWidth: 170, lineHeightFactor: 1.45 });
+
+		doc.setDrawColor(190, 190, 190);
+		(doc as any).setLineDash([2, 2], 0);
+		doc.line(20, 128, 190, 128);
 		(doc as any).setLineDash([], 0);
 
-		// Footer
-		doc.setFont('helvetica', 'normal');
-		doc.setFontSize(9);
-		doc.text('Presenta este ticket en puerta', 8, 120);
-		doc.text('Pre-entrada virtual - valida con QR', 8, 126);
+		doc.setFontSize(8);
+		doc.setTextColor(100, 100, 100);
+		doc.text('Generado automaticamente por Entradas YA', 20, pageHeight - 10);
 
 		doc.save(`entrada-${entrada.codigo_qr}.pdf`);
 	}
