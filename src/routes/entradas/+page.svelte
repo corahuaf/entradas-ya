@@ -138,11 +138,6 @@
 		doc.setFont('helvetica', 'normal');
 		doc.text(entrada.nombre_cliente, qrBoxX, qrBoxY - 11);
 
-		doc.setFont('helvetica', 'bold');
-		doc.text('FECHA:', qrBoxX, qrBoxY - 9);
-		doc.setFont('helvetica', 'normal');
-		doc.text(new Date().toLocaleDateString(), qrBoxX, qrBoxY - 4);
-
 		doc.setDrawColor(255, 255, 255);
 		doc.setLineWidth(0.4);
 		doc.rect(qrBoxX, qrBoxY, 39, 39);
@@ -171,6 +166,7 @@
 
 		doc.setFontSize(8);
 		doc.setTextColor(100, 100, 100);
+		doc.text(`Fecha de compra: ${new Date().toLocaleDateString()}`, 20, pageHeight - 15);
 		doc.text('Generado automaticamente por Entradas YA', 20, pageHeight - 10);
 
 		doc.save(`entrada-${entrada.codigo_qr}.pdf`);
