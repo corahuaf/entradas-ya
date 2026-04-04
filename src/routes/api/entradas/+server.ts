@@ -72,69 +72,116 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	try {
 		const evento_id = url.searchParams.get('evento_id');
 		const estado = url.searchParams.get('estado');
-		const limit = parseInt(url.searchParams.get('limit') || '50');
-		const offset = parseInt(url.searchParams.get('offset') || '0');
+		const search = (url.searchParams.get('search') || '').trim();
+		const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
+		const offset = Math.max(parseInt(url.searchParams.get('offset') || '0'), 0);
 
-		let entradas: any[] = [];
+		const where: string[] = [];
+		const params: any[] = [];
 
-		if (evento_id && estado) {
-			entradas = await sql`
-				SELECT e.id, e.codigo_qr, e.evento_id, e.nombre_cliente, e.estado,
-					   e.fecha_compra, e.fecha_validacion, e.usuario_validador_id,
-					   ev.nombre as evento_nombre,
-					   u.nombre as usuario_validador
-				FROM entradas e
-				JOIN eventos ev ON e.evento_id = ev.id
-				LEFT JOIN usuarios u ON e.usuario_validador_id = u.id
-				WHERE e.evento_id = ${parseInt(evento_id)} AND e.estado = ${estado}
-				ORDER BY e.fecha_compra DESC
-				LIMIT ${limit} OFFSET ${offset}
-			`;
-		} else if (evento_id) {
-			entradas = await sql`
-				SELECT e.id, e.codigo_qr, e.evento_id, e.nombre_cliente, e.estado,
-					   e.fecha_compra, e.fecha_validacion, e.usuario_validador_id,
-					   ev.nombre as evento_nombre,
-					   u.nombre as usuario_validador
-				FROM entradas e
-				JOIN eventos ev ON e.evento_id = ev.id
-				LEFT JOIN usuarios u ON e.usuario_validador_id = u.id
-				WHERE e.evento_id = ${parseInt(evento_id)}
-				ORDER BY e.fecha_compra DESC
-				LIMIT ${limit} OFFSET ${offset}
-			`;
-		} else if (estado) {
-			entradas = await sql`
-				SELECT e.id, e.codigo_qr, e.evento_id, e.nombre_cliente, e.estado,
-					   e.fecha_compra, e.fecha_validacion, e.usuario_validador_id,
-					   ev.nombre as evento_nombre,
-					   u.nombre as usuario_validador
-				FROM entradas e
-				JOIN eventos ev ON e.evento_id = ev.id
-				LEFT JOIN usuarios u ON e.usuario_validador_id = u.id
-				WHERE e.estado = ${estado}
-				ORDER BY e.fecha_compra DESC
-				LIMIT ${limit} OFFSET ${offset}
-			`;
-		} else {
-			entradas = await sql`
-				SELECT e.id, e.codigo_qr, e.evento_id, e.nombre_cliente, e.estado,
-					   e.fecha_compra, e.fecha_validacion, e.usuario_validador_id,
-					   ev.nombre as evento_nombre,
-					   u.nombre as usuario_validador
-				FROM entradas e
-				JOIN eventos ev ON e.evento_id = ev.id
-				LEFT JOIN usuarios u ON e.usuario_validador_id = u.id
-				ORDER BY e.fecha_compra DESC
-				LIMIT ${limit} OFFSET ${offset}
-			`;
+		if (evento_id) {
+			const eventoIdNum = parseInt(evento_id);
+			if (!Number.isNaN(eventoIdNum)) {
+				params.push(eventoIdNum);
+				where.push(`e.evento_id = $${params.length}`);
+			}
 		}
+
+		if (estado) {
+			params.push(estado);
+			where.push(`e.estado = $${params.length}`);
+		}
+
+		if (search) {
+			params.push(`%${search}%`);
+			where.push(`(e.codigo_qr ILIKE $${params.length} OR e.nombre_cliente ILIKE $${params.length})`);
+		}
+
+		params.push(limit);
+		const limitIndex = params.length;
+		params.push(offset);
+		const offsetIndex = params.length;
+
+		const query = `
+			SELECT e.id, e.codigo_qr, e.evento_id, e.nombre_cliente, e.estado,
+				   e.fecha_compra, e.fecha_validacion, e.usuario_validador_id,
+				   ev.nombre as evento_nombre,
+				   u.nombre as usuario_validador
+			FROM entradas e
+			JOIN eventos ev ON e.evento_id = ev.id
+			LEFT JOIN usuarios u ON e.usuario_validador_id = u.id
+			${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+			ORDER BY e.fecha_compra DESC
+			LIMIT $${limitIndex} OFFSET $${offsetIndex}
+		`;
+
+		const entradas = await sql.unsafe(query, params);
 
 		return json({ success: true, entradas });
 	} catch (error) {
 		console.error('Error obteniendo entradas:', error);
 		return json(
 			{ success: false, message: 'Error al obtener entradas' },
+			{ status: 500 }
+		);
+	}
+};
+
+/**
+ * DELETE /api/entradas - Eliminar entrada por id
+ */
+export const DELETE: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user || !['ADMIN'].includes(locals.user.rol)) {
+		return json(
+			{ success: false, message: 'No autorizado' },
+			{ status: 401 }
+		);
+	}
+
+	try {
+		const { id } = await request.json();
+		const entradaId = Number(id);
+
+		if (!entradaId || Number.isNaN(entradaId)) {
+			return json(
+				{ success: false, message: 'ID de entrada requerido' },
+				{ status: 400 }
+			);
+		}
+
+		const entradas = await sql`
+			SELECT id, estado, codigo_qr
+			FROM entradas
+			WHERE id = ${entradaId}
+		`;
+
+		if (entradas.length === 0) {
+			return json(
+				{ success: false, message: 'Entrada no encontrada' },
+				{ status: 404 }
+			);
+		}
+
+		if (entradas[0].estado === 'VALIDADO') {
+			return json(
+				{ success: false, message: 'No se puede eliminar una entrada validada' },
+				{ status: 409 }
+			);
+		}
+
+		await sql`
+			DELETE FROM entradas
+			WHERE id = ${entradaId}
+		`;
+
+		return json({
+			success: true,
+			message: 'Entrada eliminada exitosamente'
+		});
+	} catch (error) {
+		console.error('Error eliminando entrada:', error);
+		return json(
+			{ success: false, message: 'Error al eliminar entrada' },
 			{ status: 500 }
 		);
 	}

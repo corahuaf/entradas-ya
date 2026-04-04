@@ -9,7 +9,9 @@
 	let error = '';
 	let success = '';
 	let showForm = false;
+	let editingId: number | null = null;
 	let formData = { nombre: '', precio: '', stock: '' };
+	let editData = { nombre: '', precio: '', stock: '', estado: 'ACTIVO' };
 
 	onMount(async () => {
 		const res = await fetch('/api/auth/me');
@@ -74,6 +76,92 @@
 			loading = false;
 		}
 	}
+
+	function iniciarEdicion(producto: any) {
+		editingId = producto.id;
+		editData = {
+			nombre: producto.nombre,
+			precio: String(producto.precio),
+			stock: String(producto.stock),
+			estado: producto.estado
+		};
+		error = '';
+		success = '';
+	}
+
+	function cancelarEdicion() {
+		editingId = null;
+	}
+
+	async function guardarEdicion(id: number) {
+		if (!editData.nombre || !editData.precio || !editData.stock) {
+			error = 'Completa todos los campos de edición';
+			return;
+		}
+
+		loading = true;
+		error = '';
+		success = '';
+
+		try {
+			const res = await fetch('/api/productos', {
+				method: 'PUT',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					id,
+					nombre: editData.nombre,
+					precio: parseFloat(editData.precio),
+					stock: parseInt(editData.stock),
+					estado: editData.estado
+				})
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				success = 'Producto actualizado exitosamente';
+				editingId = null;
+				await loadProductos();
+			} else {
+				error = data.message || 'Error al actualizar producto';
+			}
+		} catch (err) {
+			error = 'Error al actualizar producto';
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function eliminarProducto(id: number, nombre: string) {
+		const confirmado = confirm(`¿Eliminar producto ${nombre}?`);
+		if (!confirmado) return;
+
+		loading = true;
+		error = '';
+		success = '';
+
+		try {
+			const res = await fetch('/api/productos', {
+				method: 'DELETE',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id })
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				success = data.message || 'Producto eliminado exitosamente';
+				if (editingId === id) editingId = null;
+				await loadProductos();
+			} else {
+				error = data.message || 'Error al eliminar producto';
+			}
+		} catch (err) {
+			error = 'Error al eliminar producto';
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
 {#if user}
@@ -133,21 +221,73 @@
 							<th>Precio</th>
 							<th>Stock</th>
 							<th>Estado</th>
+							<th>Acciones</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each productos as producto (producto.id)}
 							<tr>
-								<td>{producto.nombre}</td>
-								<td>S/ {parseFloat(producto.precio).toFixed(2)}</td>
-								<td>
-									<span class="stock" class:bajo={producto.stock < 10}>
-										{producto.stock}
-									</span>
-								</td>
-								<td>
-									<span class="badge estado">{producto.estado}</span>
-								</td>
+								{#if editingId === producto.id}
+									<td>
+										<input class="inline-input" bind:value={editData.nombre} maxlength="150" />
+									</td>
+									<td>
+										<input
+											class="inline-input"
+											type="number"
+											step="0.01"
+											bind:value={editData.precio}
+										/>
+									</td>
+									<td>
+										<input class="inline-input" type="number" bind:value={editData.stock} />
+									</td>
+									<td>
+										<select class="inline-input" bind:value={editData.estado}>
+											<option value="ACTIVO">ACTIVO</option>
+											<option value="INACTIVO">INACTIVO</option>
+										</select>
+									</td>
+									<td>
+										<div class="acciones">
+											<button
+												class="btn btn-mini btn-save"
+												on:click={() => guardarEdicion(producto.id)}
+												disabled={loading}>Guardar</button
+											>
+											<button
+												class="btn btn-mini btn-cancel"
+												on:click={cancelarEdicion}
+												disabled={loading}>Cancelar</button
+											>
+										</div>
+									</td>
+								{:else}
+									<td>{producto.nombre}</td>
+									<td>S/ {parseFloat(producto.precio).toFixed(2)}</td>
+									<td>
+										<span class="stock" class:bajo={producto.stock < 10}>
+											{producto.stock}
+										</span>
+									</td>
+									<td>
+										<span class="badge estado">{producto.estado}</span>
+									</td>
+									<td>
+										<div class="acciones">
+											<button
+												class="btn btn-mini btn-edit"
+												on:click={() => iniciarEdicion(producto)}
+												disabled={loading}>Editar</button
+											>
+											<button
+												class="btn btn-mini btn-delete"
+												on:click={() => eliminarProducto(producto.id, producto.nombre)}
+												disabled={loading}>Eliminar</button
+											>
+										</div>
+									</td>
+								{/if}
 							</tr>
 						{/each}
 					</tbody>
@@ -203,6 +343,11 @@
 		cursor: pointer;
 		font-size: 14px;
 		transition: all 0.3s;
+	}
+
+	.btn-mini {
+		padding: 6px 10px;
+		font-size: 12px;
 	}
 
 	.btn-add {
@@ -333,5 +478,27 @@
 	.badge.estado {
 		background: #00b894;
 		color: white;
+	}
+
+	.acciones {
+		display: flex;
+		gap: 8px;
+	}
+
+	.inline-input {
+		width: 100%;
+		padding: 8px;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+	}
+
+	.btn-edit {
+		background: #0984e3;
+		color: #fff;
+	}
+
+	.btn-delete {
+		background: #d63031;
+		color: #fff;
 	}
 </style>

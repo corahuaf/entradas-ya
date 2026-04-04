@@ -14,6 +14,8 @@
 	let eventoId = '';
 	let nombreCliente = '';
 	let entrada: any = null;
+	let entradasRecientes: any[] = [];
+	let deletingId: number | null = null;
 	let qrDataUrl = '';
 	let fondoDataUrl = '';
 
@@ -25,7 +27,7 @@
 			return;
 		}
 		user = data.user;
-		await Promise.all([loadEventos(), loadFondoEntrada()]);
+		await Promise.all([loadEventos(), loadFondoEntrada(), loadEntradasRecientes()]);
 	});
 
 	async function loadFondoEntrada() {
@@ -61,6 +63,18 @@
 		}
 	}
 
+	async function loadEntradasRecientes() {
+		try {
+			const res = await fetch('/api/entradas?limit=20', { credentials: 'include' });
+			const data = await res.json();
+			if (data.success) {
+				entradasRecientes = data.entradas;
+			}
+		} catch (err) {
+			error = 'Error al cargar entradas recientes';
+		}
+	}
+
 	async function crearEntrada() {
 		error = '';
 		success = '';
@@ -88,6 +102,7 @@
 			if (data.success) {
 				entrada = data.entrada;
 				success = 'Entrada creada. Descarga el PDF.';
+				await loadEntradasRecientes();
 				qrDataUrl = await QRCode.toDataURL(entrada.codigo_qr, {
 					width: 220,
 					margin: 1
@@ -99,6 +114,42 @@
 			error = 'Error al crear entrada';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function eliminarEntrada(id: number) {
+		const confirmar = confirm('¿Seguro que deseas eliminar esta entrada?');
+		if (!confirmar) return;
+
+		loading = true;
+		deletingId = id;
+		error = '';
+		success = '';
+
+		try {
+			const res = await fetch('/api/entradas', {
+				method: 'DELETE',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ id })
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				success = 'Entrada eliminada exitosamente';
+				if (entrada && entrada.id === id) {
+					entrada = null;
+					qrDataUrl = '';
+				}
+				await loadEntradasRecientes();
+			} else {
+				error = data.message || 'Error al eliminar entrada';
+			}
+		} catch (err) {
+			error = 'Error al eliminar entrada';
+		} finally {
+			loading = false;
+			deletingId = null;
 		}
 	}
 
@@ -230,6 +281,46 @@
 				<button class="btn btn-download" on:click={descargarPDF}>Descargar PDF</button>
 			</div>
 		{/if}
+
+		<div class="preview">
+			<h2>Entradas recientes generadas</h2>
+			{#if entradasRecientes.length === 0}
+				<p class="empty">No hay entradas registradas.</p>
+			{:else}
+				<div class="tabla-container">
+					<table>
+						<thead>
+							<tr>
+								<th>ID</th>
+								<th>Cliente</th>
+								<th>Evento</th>
+								<th>Estado</th>
+								<th>Acciones</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each entradasRecientes as item (item.id)}
+								<tr>
+									<td>#{item.id}</td>
+									<td>{item.nombre_cliente}</td>
+									<td>{item.evento_nombre}</td>
+									<td>{item.estado}</td>
+									<td>
+										<button
+											class="btn btn-delete"
+											on:click={() => eliminarEntrada(item.id)}
+											disabled={loading || deletingId === item.id || item.estado === 'VALIDADO'}
+										>
+											{deletingId === item.id ? 'Eliminando...' : 'Eliminar'}
+										</button>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</div>
 	</div>
 {/if}
 
@@ -314,6 +405,7 @@
 		padding: 20px;
 		border-radius: 8px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+		margin-top: 20px;
 	}
 
 	.preview-card {
@@ -335,5 +427,41 @@
 	.btn-download {
 		background: #2d3436;
 		color: white;
+	}
+
+	.tabla-container {
+		overflow-x: auto;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		margin-top: 10px;
+	}
+
+	th,
+	td {
+		padding: 10px;
+		text-align: left;
+		border-bottom: 1px solid #eee;
+		font-size: 14px;
+	}
+
+	th {
+		font-size: 12px;
+		text-transform: uppercase;
+		color: #666;
+	}
+
+	.empty {
+		color: #777;
+		margin: 0;
+	}
+
+	.btn-delete {
+		background: #d63031;
+		color: #fff;
+		padding: 8px 12px;
+		font-size: 12px;
 	}
 </style>

@@ -8,6 +8,7 @@
 	let user: any = null;
 	let codigo = '';
 	let entrada: any = null;
+	let resultados: any[] = [];
 	let loading = false;
 	let error = '';
 	let success = '';
@@ -28,20 +29,28 @@
 
 	async function buscarEntrada() {
 		if (!codigo.trim()) {
-			error = 'Por favor ingresa un código';
+			error = 'Por favor ingresa un nombre o código';
 			return;
 		}
 
 		loading = true;
 		error = '';
 		entrada = null;
+		resultados = [];
 
 		try {
-			const res = await fetch(`/api/entradas/${codigo}`);
+			const query = encodeURIComponent(codigo.trim());
+			const res = await fetch(`/api/entradas?search=${query}&limit=10`, {
+				credentials: 'include'
+			});
 			const data = await res.json();
 
-			if (data.success) {
-				entrada = data.entrada;
+			if (data.success && Array.isArray(data.entradas) && data.entradas.length > 0) {
+				if (data.entradas.length === 1) {
+					entrada = data.entradas[0];
+				} else {
+					resultados = data.entradas;
+				}
 			} else {
 				error = data.message || 'Entrada no encontrada';
 			}
@@ -67,6 +76,7 @@
 			if (data.success) {
 				success = data.message;
 				entrada = data.entrada;
+				resultados = [];
 				codigo = '';
 				setTimeout(() => {
 					entrada = null;
@@ -85,8 +95,15 @@
 	function limpiar() {
 		codigo = '';
 		entrada = null;
+		resultados = [];
 		error = '';
 		success = '';
+	}
+
+	function seleccionarEntrada(item: any) {
+		entrada = item;
+		resultados = [];
+		error = '';
 	}
 
 	async function startCamera() {
@@ -105,7 +122,7 @@
 			await qrScanner.start(
 				{ facingMode: 'environment' },
 				{ fps: 10, qrbox: { width: 220, height: 220 } },
-				async (decodedText) => {
+				async (decodedText: string) => {
 					if (decodedText && decodedText !== codigo) {
 						codigo = decodedText;
 						await buscarEntrada();
@@ -165,7 +182,7 @@
 						<input
 							type="text"
 							bind:value={codigo}
-							placeholder="📍 Escanea o ingresa código QR"
+							placeholder="📍 Escanea o ingresa código QR o nombre"
 							on:keydown={handleKeydown}
 							disabled={loading}
 							class="codigo-input"
@@ -202,6 +219,18 @@
 					{#if success}
 						<div class="alert success">
 							✅ {success}
+						</div>
+					{/if}
+
+					{#if resultados.length > 0}
+						<div class="resultados-box">
+							<h3>Coincidencias ({resultados.length})</h3>
+							{#each resultados as item (item.id)}
+								<button class="resultado-item" on:click={() => seleccionarEntrada(item)}>
+									<span class="resultado-main">{item.nombre_cliente}</span>
+									<span class="resultado-sub">{item.codigo_qr} · {item.evento_nombre}</span>
+								</button>
+							{/each}
 						</div>
 					{/if}
 
@@ -261,10 +290,10 @@
 								<button class="btn btn-limpiar" on:click={limpiar}> NUEVA BÚSQUEDA </button>
 							</div>
 						</div>
-					{:else if !error}
+					{:else if !error && resultados.length === 0}
 						<div class="placeholder">
 							<p style="font-size: 48px;">🎫</p>
-							<p>Ingresa o escanea un código de entrada</p>
+							<p>Ingresa o escanea un código, o busca por nombre</p>
 						</div>
 					{/if}
 				</div>
@@ -408,6 +437,49 @@
 		padding: 20px;
 		border-radius: 8px;
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	}
+
+	.resultados-box {
+		margin-bottom: 15px;
+		padding: 12px;
+		border: 1px solid #e7eef2;
+		border-radius: 8px;
+		background: #fbfdfe;
+	}
+
+	.resultados-box h3 {
+		margin: 0 0 10px 0;
+		font-size: 14px;
+		color: #555;
+	}
+
+	.resultado-item {
+		width: 100%;
+		text-align: left;
+		border: 1px solid #e0e0e0;
+		background: #fff;
+		border-radius: 6px;
+		padding: 10px;
+		margin-bottom: 8px;
+		cursor: pointer;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.resultado-item:hover {
+		border-color: #45b7d1;
+		background: #f4fbfd;
+	}
+
+	.resultado-main {
+		font-weight: 700;
+		color: #222;
+	}
+
+	.resultado-sub {
+		font-size: 12px;
+		color: #666;
 	}
 
 	.alert {
