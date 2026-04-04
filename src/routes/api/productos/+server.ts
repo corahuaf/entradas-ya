@@ -78,26 +78,34 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
 			);
 		}
 
-		let query = `UPDATE productos SET `;
-		const updates: string[] = [];
-		const params: any[] = [];
-
-		if (nombre !== undefined) updates.push(`nombre = $${params.length + 1}`), params.push(nombre);
-		if (precio !== undefined) updates.push(`precio = $${params.length + 1}`), params.push(precio);
-		if (stock !== undefined) updates.push(`stock = $${params.length + 1}`), params.push(stock);
-		if (estado !== undefined) updates.push(`estado = $${params.length + 1}`), params.push(estado);
-
-		if (updates.length === 0) {
+		if (nombre === undefined && precio === undefined && stock === undefined && estado === undefined) {
 			return json(
 				{ success: false, message: 'No hay campos para actualizar' },
 				{ status: 400 }
 			);
 		}
 
-		params.push(id);
-		const updateQuery = `${query}${updates.join(', ')} WHERE id = $${params.length} RETURNING *`;
+		const existentes = await sql`
+			SELECT id FROM productos WHERE id = ${id}
+		`;
 
-		const resultado = await sql.unsafe(updateQuery, params);
+		if (existentes.length === 0) {
+			return json(
+				{ success: false, message: 'Producto no encontrado' },
+				{ status: 404 }
+			);
+		}
+
+		const resultado = await sql`
+			UPDATE productos
+			SET
+				nombre = COALESCE(${nombre}, nombre),
+				precio = COALESCE(${precio}, precio),
+				stock = COALESCE(${stock}, stock),
+				estado = COALESCE(${estado}, estado)
+			WHERE id = ${id}
+			RETURNING id, nombre, precio, stock, estado
+		`;
 
 		return json({
 			success: true,
