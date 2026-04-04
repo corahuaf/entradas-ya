@@ -6,7 +6,17 @@
 	let user: any = null;
 	let usuarios: any[] = [];
 	let loading = false;
+	let saving = false;
+	let updatingId: number | null = null;
 	let error = '';
+	let success = '';
+
+	let form = {
+		nombre: '',
+		email: '',
+		password: '',
+		rol: 'CAJERO'
+	};
 
 	onMount(async () => {
 		const res = await fetch('/api/auth/me');
@@ -16,10 +26,101 @@
 			return;
 		}
 		user = data.user;
-
-		// Para demo, mostrar usuario actual
-		usuarios = [user];
+		await loadUsuarios();
 	});
+
+	async function loadUsuarios() {
+		loading = true;
+		error = '';
+
+		try {
+			const res = await fetch('/api/usuarios');
+			const data = await res.json();
+
+			if (data.success) {
+				usuarios = data.usuarios;
+			} else {
+				error = data.message || 'No se pudo cargar usuarios';
+			}
+		} catch (err) {
+			error = 'Error al cargar usuarios';
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function crearUsuario() {
+		if (!form.nombre.trim() || !form.email.trim() || !form.password || !form.rol) {
+			error = 'Completa todos los campos';
+			return;
+		}
+
+		saving = true;
+		error = '';
+		success = '';
+
+		try {
+			const res = await fetch('/api/usuarios', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(form)
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				success = data.message || 'Usuario creado';
+				form = { nombre: '', email: '', password: '', rol: 'CAJERO' };
+				await loadUsuarios();
+			} else {
+				error = data.message || 'No se pudo crear el usuario';
+			}
+		} catch (err) {
+			error = 'Error al crear usuario';
+		} finally {
+			saving = false;
+		}
+	}
+
+	async function cambiarEstadoUsuario(usuario: any) {
+		if (updatingId !== null) {
+			return;
+		}
+
+		const nuevoEstado = usuario.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+		const accion = nuevoEstado === 'INACTIVO' ? 'anular' : 'reactivar';
+		const confirmado = window.confirm(`¿Deseas ${accion} al usuario ${usuario.nombre}?`);
+		if (!confirmado) {
+			return;
+		}
+
+		updatingId = Number(usuario.id);
+		error = '';
+		success = '';
+
+		try {
+			const res = await fetch('/api/usuarios', {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ id: usuario.id, estado: nuevoEstado })
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				success = data.message || 'Usuario actualizado';
+				await loadUsuarios();
+			} else {
+				error = data.message || 'No se pudo actualizar usuario';
+			}
+		} catch (err) {
+			error = 'Error al actualizar usuario';
+		} finally {
+			updatingId = null;
+		}
+	}
 </script>
 
 {#if user}
@@ -32,12 +133,30 @@
 			<div class="alert error">{error}</div>
 		{/if}
 
-		<div class="info-box">
-			<p>Los usuarios se crean directamente en la base de datos para este demo.</p>
-			<p>
-				Roles disponibles: <strong>ADMIN</strong>, <strong>CAJERO</strong>,
-				<strong>CONTROL_ENTRADAS</strong>
-			</p>
+		{#if success}
+			<div class="alert success">{success}</div>
+		{/if}
+
+		<div class="create-card">
+			<h2>Agregar usuario</h2>
+			<div class="form-grid">
+				<input type="text" placeholder="Nombre" bind:value={form.nombre} />
+				<input type="email" placeholder="Email" bind:value={form.email} />
+				<input type="password" placeholder="Contraseña" bind:value={form.password} />
+				<select bind:value={form.rol}>
+					<option value="CAJERO">CAJERO</option>
+					<option value="CONTROL_ENTRADAS">CONTROL_ENTRADAS</option>
+					<option value="ADMIN">ADMIN</option>
+				</select>
+			</div>
+			<div class="actions-row">
+				<button class="btn btn-create" on:click={crearUsuario} disabled={saving}>
+					{saving ? 'Guardando...' : 'Agregar Usuario'}
+				</button>
+				<button class="btn btn-refresh" on:click={loadUsuarios} disabled={loading}>
+					{loading ? 'Actualizando...' : 'Actualizar Lista'}
+				</button>
+			</div>
 		</div>
 
 		<div class="usuarios-table">
@@ -49,34 +168,50 @@
 						<th>Email</th>
 						<th>Rol</th>
 						<th>Estado</th>
+						<th>Acciones</th>
 					</tr>
 				</thead>
 				<tbody>
-					{#each usuarios as usuario (usuario.id)}
+					{#if loading}
 						<tr>
-							<td>{usuario.id}</td>
-							<td>{usuario.nombre}</td>
-							<td>{usuario.email}</td>
-							<td><span class="badge role">{usuario.rol}</span></td>
-							<td><span class="badge estado">{usuario.estado}</span></td>
+							<td colspan="6" class="empty-row">Cargando usuarios...</td>
 						</tr>
-					{/each}
+					{:else if usuarios.length === 0}
+						<tr>
+							<td colspan="6" class="empty-row">No hay usuarios registrados</td>
+						</tr>
+					{:else}
+						{#each usuarios as usuario (usuario.id)}
+							<tr>
+								<td>{usuario.id}</td>
+								<td>{usuario.nombre}</td>
+								<td>{usuario.email}</td>
+								<td><span class="badge role">{usuario.rol}</span></td>
+								<td>
+									<span class="badge estado" class:inactivo={usuario.estado === 'INACTIVO'}
+										>{usuario.estado}</span
+									>
+								</td>
+								<td>
+									<button
+										class="btn-toggle"
+										on:click={() => cambiarEstadoUsuario(usuario)}
+										disabled={updatingId === Number(usuario.id)}
+									>
+										{#if updatingId === Number(usuario.id)}
+											Procesando...
+										{:else if usuario.estado === 'ACTIVO'}
+											Anular
+										{:else}
+											Reactivar
+										{/if}
+									</button>
+								</td>
+							</tr>
+						{/each}
+					{/if}
 				</tbody>
 			</table>
-		</div>
-
-		<div class="sql-section">
-			<h2>Crear nuevo usuario (SQL)</h2>
-			<pre><code
-					>INSERT INTO usuarios (nombre, email, password, rol, estado)
-VALUES (
-  'Nombre Usuario',
-  'email@sistema.local',
-  '[hash-bcrypt]',
-  'CAJERO',
-  'ACTIVO'
-);</code
-				></pre>
 		</div>
 	</div>
 {/if}
@@ -99,18 +234,55 @@ VALUES (
 		margin-top: 0;
 	}
 
-	.info-box {
-		background: #e8f4f8;
-		padding: 15px;
+	.create-card {
+		background: #ffffff;
+		padding: 20px;
 		border-radius: 6px;
 		margin-bottom: 20px;
-		border-left: 4px solid #667eea;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 	}
 
-	.info-box p {
-		margin: 5px 0;
-		color: #333;
+	.form-grid {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 10px;
+	}
+
+	.form-grid input,
+	.form-grid select {
+		padding: 10px;
+		border: 1px solid #d7dce3;
+		border-radius: 6px;
 		font-size: 14px;
+	}
+
+	.actions-row {
+		display: flex;
+		gap: 10px;
+		margin-top: 12px;
+	}
+
+	.btn {
+		padding: 10px 14px;
+		border-radius: 6px;
+		border: none;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.btn-create {
+		background: #2563eb;
+		color: #fff;
+	}
+
+	.btn-refresh {
+		background: #475569;
+		color: #fff;
+	}
+
+	.btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.alert {
@@ -122,6 +294,11 @@ VALUES (
 	.alert.error {
 		background: #fee;
 		color: #c33;
+	}
+
+	.alert.success {
+		background: #eafaf1;
+		color: #0f8a4a;
 	}
 
 	.usuarios-table {
@@ -178,23 +355,38 @@ VALUES (
 		color: white;
 	}
 
-	.sql-section {
-		background: white;
-		padding: 20px;
-		border-radius: 8px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+	.badge.estado.inactivo {
+		background: #ef4444;
 	}
 
-	pre {
-		background: #f5f5f5;
-		padding: 15px;
-		border-radius: 4px;
-		overflow-x: auto;
+	.empty-row {
+		text-align: center;
+		color: #64748b;
+	}
+
+	.btn-toggle {
+		padding: 7px 10px;
+		border: none;
+		border-radius: 6px;
+		background: #0f766e;
+		color: #fff;
 		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
 	}
 
-	code {
-		color: #333;
-		font-family: 'Monaco', 'Courier New', monospace;
+	.btn-toggle:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	@media (max-width: 900px) {
+		.form-grid {
+			grid-template-columns: 1fr;
+		}
+
+		table {
+			font-size: 12px;
+		}
 	}
 </style>

@@ -6,26 +6,46 @@
 	let user: any = null;
 	let productos: any[] = [];
 	let carrito: any[] = [];
+	let ventasRecientes: any[] = [];
 	let busqueda = '';
 	let metodoPago = 'EFECTIVO';
 	let loading = false;
+	let loadingVentas = false;
+	let anulandoVentaId: number | null = null;
 	let error = '';
 	let success = '';
 	let mostrarConfirmacion = false;
 	let resultadoVenta: { success: boolean; message: string } | null = null;
+	let searchInput: HTMLInputElement | null = null;
 
-	onMount(async () => {
-		// Validar sesión
-		const res = await fetch('/api/auth/me');
-		const data = await res.json();
-		if (!data.user) {
-			goto('/login');
-			return;
-		}
-		user = data.user;
+	onMount(() => {
+		const onGlobalKeydown = (event: KeyboardEvent) => {
+			if (event.ctrlKey && event.key === 'Enter' && carrito.length > 0 && !loading) {
+				event.preventDefault();
+				registrarVenta();
+			}
+		};
 
-		// Cargar productos
-		await loadProductos();
+		window.addEventListener('keydown', onGlobalKeydown);
+
+		void (async () => {
+			// Validar sesión
+			const res = await fetch('/api/auth/me');
+			const data = await res.json();
+			if (!data.user) {
+				goto('/login');
+				return;
+			}
+			user = data.user;
+
+			// Cargar datos iniciales de caja
+			await Promise.all([loadProductos(), loadVentasRecientes()]);
+			searchInput?.focus();
+		})();
+
+		return () => {
+			window.removeEventListener('keydown', onGlobalKeydown);
+		};
 	});
 
 	async function loadProductos() {
@@ -44,8 +64,30 @@
 		}
 	}
 
+	async function loadVentasRecientes() {
+		loadingVentas = true;
+		try {
+			const res = await fetch('/api/ventas?limit=8');
+			const data = await res.json();
+			if (data.success) {
+				ventasRecientes = data.ventas;
+			}
+		} catch (err) {
+			error = 'Error al cargar ventas recientes';
+		} finally {
+			loadingVentas = false;
+		}
+	}
+
 	function agregarAlCarrito(producto: any) {
 		const existe = carrito.find((p) => p.id === producto.id);
+		const cantidadActual = existe ? Number(existe.cantidad) : 0;
+
+		if (cantidadActual >= Number(producto.stock)) {
+			error = `Stock insuficiente para ${producto.nombre}`;
+			return;
+		}
+
 		if (existe) {
 			existe.cantidad += 1;
 			existe.subtotal = existe.cantidad * Number(existe.precio);
@@ -64,8 +106,14 @@
 	}
 
 	function cambiarCantidad(index: number, cantidad: number) {
+		const stockDisponible = Number(carrito[index].stock);
 		if (cantidad <= 0) {
 			carrito.splice(index, 1);
+			carrito = carrito;
+		} else if (cantidad > stockDisponible) {
+			carrito[index].cantidad = stockDisponible;
+			carrito[index].subtotal = stockDisponible * carrito[index].precio;
+			error = `Máximo disponible: ${stockDisponible}`;
 			carrito = carrito;
 		} else {
 			carrito[index].cantidad = cantidad;
@@ -90,6 +138,18 @@
 		busqueda = '';
 		error = '';
 		success = '';
+		searchInput?.focus();
+	}
+
+	function onBusquedaKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Enter') {
+			return;
+		}
+
+		event.preventDefault();
+		if (filteredProductos.length > 0) {
+			agregarAlCarrito(filteredProductos[0]);
+		}
 	}
 
 	function cerrarConfirmacion() {
@@ -104,6 +164,7 @@
 	}
 
 	$: total = carrito.reduce((sum, item) => sum + item.subtotal, 0);
+	$: totalItems = carrito.reduce((sum, item) => sum + Number(item.cantidad), 0);
 	$: filteredProductos = productos.filter((p) =>
 		p.nombre.toLowerCase().includes(busqueda.toLowerCase())
 	);
@@ -140,7 +201,7 @@
 					message: data.message || 'Venta registrada exitosamente'
 				};
 				limpiarCarrito();
-				await loadProductos();
+				await Promise.all([loadProductos(), loadVentasRecientes()]);
 			} else {
 				error = data.message || 'Error al registrar venta';
 				resultadoVenta = {
@@ -158,6 +219,46 @@
 			loading = false;
 		}
 	}
+
+	async function anularVenta(ventaId: number) {
+		if (anulandoVentaId !== null) {
+			return;
+		}
+
+		const confirmado = window.confirm(
+			`¿Confirmas anular la venta #${ventaId}? Se repondrá el stock automáticamente.`
+		);
+
+		if (!confirmado) {
+			return;
+		}
+
+		error = '';
+		success = '';
+		anulandoVentaId = ventaId;
+
+		try {
+			const res = await fetch('/api/ventas', {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ ventaId })
+			});
+
+			const data = await res.json();
+			if (data.success) {
+				success = data.message || 'Venta anulada correctamente';
+				await Promise.all([loadProductos(), loadVentasRecientes()]);
+			} else {
+				error = data.message || 'No se pudo anular la venta';
+			}
+		} catch (err) {
+			error = 'Error al anular la venta';
+		} finally {
+			anulandoVentaId = null;
+		}
+	}
 </script>
 
 {#if user}
@@ -166,13 +267,20 @@
 	<div class="caja-container">
 		<div class="caja-content">
 			<h1>CAJA - VENTA DE PRODUCTOS</h1>
+			<p class="help-text">Atajos: Enter agrega el primer resultado | Ctrl+Enter cobra rápido</p>
 
 			<div class="caja-layout">
 				<!-- Productos -->
 				<div class="productos-section">
 					<h2>Productos</h2>
 					<div class="search-box">
-						<input type="text" placeholder="🔍 Buscar producto..." bind:value={busqueda} />
+						<input
+							type="text"
+							placeholder="🔍 Buscar producto y presiona Enter..."
+							bind:value={busqueda}
+							bind:this={searchInput}
+							on:keydown={onBusquedaKeydown}
+						/>
 					</div>
 
 					<div class="productos-grid">
@@ -241,6 +349,10 @@
 
 					<!-- Resumen -->
 					<div class="resumen">
+						<div class="resumen-row">
+							<span>Items:</span>
+							<span>{totalItems}</span>
+						</div>
 						<div class="resumen-row total">
 							<span>TOTAL:</span>
 							<span>S/ {total.toFixed(2)}</span>
@@ -270,7 +382,7 @@
 								on:click={registrarVenta}
 								disabled={carrito.length === 0 || loading}
 							>
-								{loading ? 'PROCESANDO...' : '💰 COBRAR'}
+								{loading ? 'PROCESANDO...' : '💰 COBRAR (Ctrl+Enter)'}
 							</button>
 							<button
 								class="btn btn-limpiar"
@@ -280,6 +392,45 @@
 								🧹 LIMPIAR
 							</button>
 						</div>
+					</div>
+
+					<div class="ventas-recientes">
+						<div class="ventas-recientes-header">
+							<h3>Ventas Recientes</h3>
+							<button class="btn-refresh" on:click={loadVentasRecientes} disabled={loadingVentas}>
+								{loadingVentas ? 'Actualizando...' : 'Actualizar'}
+							</button>
+						</div>
+
+						{#if ventasRecientes.length === 0}
+							<p class="ventas-empty">No hay ventas recientes.</p>
+						{:else}
+							<div class="ventas-lista">
+								{#each ventasRecientes as venta (venta.id)}
+									<div class="venta-item">
+										<div class="venta-info">
+											<strong>#{venta.id}</strong>
+											<span>{new Date(venta.fecha).toLocaleString()}</span>
+											<span>S/ {parseFloat(venta.total).toFixed(2)} - {venta.metodo_pago}</span>
+										</div>
+										<div class="venta-actions">
+											<span class="estado-badge" class:cancelada={venta.estado === 'CANCELADA'}>
+												{venta.estado}
+											</span>
+											{#if venta.estado === 'COMPLETADA'}
+												<button
+													class="btn-anular"
+													on:click={() => anularVenta(Number(venta.id))}
+													disabled={anulandoVentaId === Number(venta.id)}
+												>
+													{anulandoVentaId === Number(venta.id) ? 'Anulando...' : 'Anular'}
+												</button>
+											{/if}
+										</div>
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				</div>
 			</div>
@@ -353,6 +504,13 @@
 		color: #333;
 		margin: 20px 0;
 		font-size: 28px;
+	}
+
+	.help-text {
+		text-align: center;
+		margin: -8px 0 20px;
+		font-size: 13px;
+		color: #5f6c7b;
 	}
 
 	h2 {
@@ -450,7 +608,7 @@
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 		display: flex;
 		flex-direction: column;
-		height: fit-content;
+		gap: 14px;
 	}
 
 	.carrito-items {
@@ -605,6 +763,107 @@
 		display: flex;
 		gap: 8px;
 		margin-top: 12px;
+	}
+
+	.ventas-recientes {
+		border-top: 2px dashed #e7e7e7;
+		padding-top: 14px;
+	}
+
+	.ventas-recientes-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		margin-bottom: 10px;
+	}
+
+	.ventas-recientes h3 {
+		margin: 0;
+		font-size: 15px;
+		color: #334155;
+	}
+
+	.btn-refresh {
+		border: 1px solid #cbd5e1;
+		background: #fff;
+		border-radius: 6px;
+		padding: 6px 10px;
+		font-size: 12px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.ventas-empty {
+		margin: 0;
+		color: #8a8f98;
+		font-size: 13px;
+	}
+
+	.ventas-lista {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		max-height: 220px;
+		overflow-y: auto;
+	}
+
+	.venta-item {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 10px;
+		border: 1px solid #e2e8f0;
+		border-radius: 8px;
+		background: #fafbfd;
+	}
+
+	.venta-info {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		font-size: 12px;
+		color: #445268;
+	}
+
+	.venta-actions {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 6px;
+	}
+
+	.estado-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px 8px;
+		border-radius: 999px;
+		font-size: 11px;
+		font-weight: 700;
+		color: #0f766e;
+		background: #ccfbf1;
+	}
+
+	.estado-badge.cancelada {
+		background: #ffe2e2;
+		color: #9f1239;
+	}
+
+	.btn-anular {
+		border: none;
+		background: #ef4444;
+		color: #fff;
+		font-size: 12px;
+		font-weight: 700;
+		padding: 6px 10px;
+		border-radius: 6px;
+		cursor: pointer;
+	}
+
+	.btn-anular:disabled,
+	.btn-refresh:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.btn {

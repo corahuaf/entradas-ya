@@ -165,3 +165,81 @@ export const GET: RequestHandler = async ({ locals, url }) => {
 		);
 	}
 };
+
+export const PATCH: RequestHandler = async ({ request, locals }) => {
+	if (!locals.user || !['ADMIN', 'CAJERO'].includes(locals.user.rol)) {
+		return json(
+			{ success: false, message: 'No autorizado' },
+			{ status: 401 }
+		);
+	}
+
+	try {
+		const { ventaId } = await request.json();
+		const ventaIdNum = Number(ventaId);
+
+		if (!Number.isInteger(ventaIdNum) || ventaIdNum <= 0) {
+			return json(
+				{ success: false, message: 'ID de venta inválido' },
+				{ status: 400 }
+			);
+		}
+
+		const venta = await sql`
+			SELECT id, estado
+			FROM ventas
+			WHERE id = ${ventaIdNum}
+			LIMIT 1
+		`;
+
+		if (venta.length === 0) {
+			return json(
+				{ success: false, message: 'Venta no encontrada' },
+				{ status: 404 }
+			);
+		}
+
+		if (venta[0].estado === 'CANCELADA') {
+			return json(
+				{ success: false, message: 'La venta ya está cancelada' },
+				{ status: 409 }
+			);
+		}
+
+		const result = await sql`
+			WITH venta_actualizada AS (
+				UPDATE ventas
+				SET estado = 'CANCELADA', fecha_actualizacion = CURRENT_TIMESTAMP
+				WHERE id = ${ventaIdNum} AND estado = 'COMPLETADA'
+				RETURNING id
+			),
+			stock_repuesto AS (
+				UPDATE productos p
+				SET stock = p.stock + dv.cantidad
+				FROM detalle_venta dv
+				JOIN venta_actualizada va ON va.id = dv.venta_id
+				WHERE p.id = dv.producto_id
+				RETURNING p.id
+			)
+			SELECT COUNT(*)::int AS ventas_actualizadas FROM venta_actualizada
+		`;
+
+		if (!result[0] || result[0].ventas_actualizadas === 0) {
+			return json(
+				{ success: false, message: 'No se pudo anular la venta' },
+				{ status: 409 }
+			);
+		}
+
+		return json({
+			success: true,
+			message: 'Venta anulada y stock repuesto'
+		});
+	} catch (error) {
+		console.error('Error anulando venta:', error);
+		return json(
+			{ success: false, message: 'Error al anular venta' },
+			{ status: 500 }
+		);
+	}
+};
